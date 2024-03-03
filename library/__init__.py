@@ -1,12 +1,15 @@
 """Initialize FastAPI app."""
-from typing import Annotated
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
+
 from .config import Settings
 
+from library.database import models
+from library.database.database import engine
 
 def create_app(config=None, aargs=None):
+    models.Base.metadata.create_all(bind=engine)
     tags_metadata = [
         {
             "name": "Utilities",
@@ -19,6 +22,10 @@ def create_app(config=None, aargs=None):
         {
             "name":"Admin",
             "description": "Api dedicated to server administration"
+        },
+        {
+            "name":"Auth",
+            "description": "Api dedicated to Authenticating Users"
         }
 
     ]
@@ -45,16 +52,13 @@ def create_app(config=None, aargs=None):
 
     Settings.OAUTH_SCHEME = OAuth2PasswordBearer(tokenUrl="token")
 
-    @app.get("/items/")
-    async def read_items(token: Annotated[str, Depends(Settings.OAUTH_SCHEME)]):
-        return {"token": token}
-
-    from .utilities import utilities, file_exports
+    from library.utilities import utilities, file_exports
     from library.admin import api as admin_api
+    from library.auth import api as auth_api
     app.include_router(utilities.utils_api)
     app.include_router(file_exports.utils_api)
     app.include_router(admin_api.admin_api)
-    
+    app.include_router(auth_api.auth_api)
 
     # Only deploy react build only if it is a client+server deployment
     if Settings.ENV_TYPE != "server" or Settings.ENV_TYPE == "development":
