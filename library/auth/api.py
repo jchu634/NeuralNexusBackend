@@ -1,15 +1,18 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.responses import ORJSONResponse, JSONResponse
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from library.database.database import SessionLocal
 from library.database import crud, models
 from library.config import Settings
 
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-from argon2 import PasswordHasher
-from argon2.exceptions import InvalidHashError
+from passlib.context import CryptContext
+from passlib.hash import argon2
 from typing import Annotated
-from pydantic import BaseModel
+from jose import JWTError, jwt
+
 import traceback
 import logging
 
@@ -20,6 +23,16 @@ auth_api = APIRouter(tags=["Auth"])
 img_path = Settings.UPLOAD_FOLDER
 models_path = Settings.MODEL_FOLDER
 isProduction = Settings.ENV_TYPE == 'production'
+# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+################ Helper Functions ################
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: str | None = None
 
 def get_db():
     db = SessionLocal()
@@ -28,15 +41,33 @@ def get_db():
     finally:
         db.close()
 
-################ Auth ####################
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, Settings.AUTH_SECRET_KEY, algorithm=Settings.AUTH_ALGORITHM)
+    return encoded_jwt
+
 async def get_current_user(token: Annotated[str, Depends(Settings.OAUTH_SCHEME)], db: Annotated[Session, Depends(get_db)]):
-    user = crud.get_users_by_username(db, token)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, Settings.AUTH_SECRET_KEY, algorithms=[Settings.AUTH_ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+    user = crud.get_users_by_username(db, token_data.username)
+    if user is None:
+        raise credentials_exception
     return JSONResponse(content={
         "username":user.username,
         "email":user.email
@@ -49,6 +80,38 @@ async def get_current_active_user(
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
+################ Auth ####################
+
+@auth_api.post("/create_user")
+def create_user(username:str, email:str, password:str, db: Session = Depends(get_db)):
+    crud.create_user(db, username,email, password)
+    return JSONResponse(content={"success":"user made"})
+
+@auth_api.post("/token")
+async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: Session = Depends(get_db)) -> Token:
+    user = crud.get_users_by_username(db, form_data.username)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        if argon2.verify(str(form_data.password), user.password_hash):
+            access_token_expires = timedelta(minutes=Settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+            access_token = create_access_token(
+                data={"sub": user.username}, expires_delta=access_token_expires
+            )
+            return Token(access_token=access_token, token_type="bearer")
+    except Exception as e:
+        logging.error(f"Login error: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 @auth_api.get("/users/me")
 async def read_users_me(current_user: Annotated[models.User, Depends(get_current_user)]):
     return current_user
@@ -56,27 +119,3 @@ async def read_users_me(current_user: Annotated[models.User, Depends(get_current
 @auth_api.get("/items/")
 async def read_items(token: Annotated[str, Depends(Settings.OAUTH_SCHEME)]):
     return {"token": token}
-
-@auth_api.post("/token")
-async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: Session = Depends(get_db)):
-    user = crud.get_users_by_username(db, form_data.username)
-    if not user:
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    ph = PasswordHasher()
-    try:
-        if ph.verify(user.password_hash, str(form_data.password)):
-            if ph.check_needs_rehash(user.password_hash):
-                crud.update_user_password(db, form_data.password)
-            return {"access_token": user.username, "token_type":"bearer"}
-    except InvalidHashError as e:
-        logging.error(f"Login error: {traceback.format_exc()}")
-        logging.debug("Invalid Hash")
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    except Exception as e:
-        logging.error(f"Login error: {traceback.format_exc()}")
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
-@auth_api.post("/create_user")
-def create_user(username:str, email:str, password:str, db: Session = Depends(get_db)):
-    crud.create_user(db, username,email, password)
-    return JSONResponse(content={"success":"user made"})
