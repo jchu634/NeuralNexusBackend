@@ -11,7 +11,11 @@ class settingsModel(BaseSettings):
     MODEL_FOLDER: str = os.path.join(library_path ,'models/')
     ALLOWED_IMAGE_EXTENSIONS: Any = ['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP']
     CACHE_TIMEOUT_PERIOD: int = 900
+    
     OAUTH_SCHEME: Any = "temp"
+    AUTH_SECRET_KEY: str = "blank"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    AUTH_ALGORITHM: str = "HS256"
 
     model_config = SettingsConfigDict(
         env_file=(
