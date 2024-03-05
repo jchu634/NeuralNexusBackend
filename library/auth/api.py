@@ -1,7 +1,7 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Security
 from fastapi.responses import ORJSONResponse, JSONResponse
-from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
+from fastapi.security import OAuth2PasswordRequestForm, SecurityScopes
+from pydantic import BaseModel, ValidationError
 from library.database.database import SessionLocal
 from library.database import crud, models
 from library.config import Settings
@@ -28,12 +28,22 @@ isProduction = Settings.ENV_TYPE == 'production'
 
 ################ Helper Functions ################
 
+credentials_exception = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Could not validate credentials",
+    headers={"WWW-Authenticate": "Bearer"},
+)
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+
 class TokenData(BaseModel):
     username: str | None = None
+    scopes: list[str] = []
+
 
 def get_db():
     db = SessionLocal()
@@ -42,6 +52,7 @@ def get_db():
     finally:
         db.close()
 
+
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     if expires_delta:
@@ -49,65 +60,97 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, Settings.AUTH_SECRET_KEY, algorithm=Settings.AUTH_ALGORITHM)
+    encoded_jwt = jwt.encode(
+        to_encode, Settings.AUTH_SECRET_KEY, algorithm=Settings.AUTH_ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(token: Annotated[str, Depends(Settings.OAUTH_SCHEME)], db: Annotated[Session, Depends(get_db)]):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+
+async def get_current_user(
+        security_scopes: SecurityScopes,
+        token: Annotated[str, Depends(Settings.OAUTH_SCHEME)],
+        db: Annotated[Session, Depends(get_db)]
+):
+
+    if security_scopes.scopes:
+        authenticate_value = f'Bearer scope="{security_scopes.scope_str}"'
+    else:
+        authenticate_value = "Bearer"
     try:
-        payload = jwt.decode(token, Settings.AUTH_SECRET_KEY, algorithms=[Settings.AUTH_ALGORITHM])
+        payload = jwt.decode(token, Settings.AUTH_SECRET_KEY,
+                             algorithms=[Settings.AUTH_ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-        token_data = TokenData(username=username)
+        token_scopes = payload.get("scopes", [])
+        logging.debug(token_scopes)
+        token_data = TokenData(scopes=token_scopes, username=username)
     except JWTError:
         raise credentials_exception
+
     user = crud.get_users_by_username(db, token_data.username)
     if user is None:
         raise credentials_exception
+    for scope in security_scopes.scopes:
+        if scope not in token_data.scopes:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not enough permissions",
+                headers={"WWW-Authenticate": authenticate_value},
+            )
     return JSONResponse(content={
-        "username":user.username,
-        "email":user.email
+        "username": user.username,
+        "email": user.email
     })
 
-async def check_if_user_admin(token: Annotated[str, Depends(Settings.OAUTH_SCHEME)], db: Annotated[Session, Depends(get_db)]):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, Settings.AUTH_SECRET_KEY, algorithms=[Settings.AUTH_ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-        token_data = TokenData(username=username)
-    except JWTError:
-        raise credentials_exception
-    user = crud.get_users_by_username(db, token_data.username)
-    if user is None:
-        raise credentials_exception
-    return user.is_admin
 
-async def get_current_active_user(
-    current_user: Annotated[models.User, Depends(get_current_user)]
-):
+async def get_current_active_user(current_user: Annotated[models.User, Security(get_current_user, scopes=["user"])]):
     if current_user.disabled:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
+
+async def check_if_user_admin(
+        security_scopes: SecurityScopes,
+        token: Annotated[str, Depends(Settings.OAUTH_SCHEME)],
+        db: Annotated[Session, Depends(get_db)]
+):
+    if security_scopes.scopes:
+        authenticate_value = f'Bearer scope="{security_scopes.scope_str}"'
+        logging.debug(authenticate_value)
+    else:
+        authenticate_value = "Bearer"
+    try:
+        payload = jwt.decode(token, Settings.AUTH_SECRET_KEY,
+                             algorithms=[Settings.AUTH_ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_scopes = payload.get("scopes", [])
+        token_data = TokenData(scopes=token_scopes, username=username)
+    except (JWTError, ValidationError):
+        raise credentials_exception
+    user = crud.get_users_by_username(db, token_data.username)
+    if user is None:
+        raise credentials_exception
+    for scope in security_scopes.scopes:
+        logging.debug(token_data.scopes)
+        if scope not in token_data.scopes:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not enough permissions",
+                headers={"WWW-Authenticate": authenticate_value},
+            )
+    return user.is_admin
+
 ################ Auth ####################
 
+
 @auth_api.post("/create_user")
-def create_user(username:str, email:str, password:str, db: Session = Depends(get_db)):
+def create_user(username: str, email: str, password: str, db: Session = Depends(get_db)):
     try:
-        crud.create_user(db, username,email, password)
+        crud.create_user(db, username, email, password)
         logging.info(f"Created user {username}")
-        return JSONResponse(content={"success":"user made"})
+        return JSONResponse(content={"success": "user made"})
     except IntegrityError as e:
         return ORJSONResponse(content={"error": "Username already taken"}, status_code=500)
     except Exception as e:
@@ -126,22 +169,28 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: 
         )
     try:
         if argon2.verify(str(form_data.password), user.password_hash):
-            access_token_expires = timedelta(minutes=Settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+            access_token_expires = timedelta(
+                minutes=Settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+            logging.debug(form_data.scopes)
             access_token = create_access_token(
-                data={"sub": user.username}, expires_delta=access_token_expires
+                data={"sub": user.username, "scopes": form_data.scopes},
+                expires_delta=access_token_expires
             )
             return Token(access_token=access_token, token_type="bearer")
     except Exception as e:
         logging.error(f"Login error: {traceback.format_exc()}")
+        logging.error(e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
 @auth_api.get("/users/me")
 async def read_users_me(current_user: Annotated[models.User, Depends(get_current_user)]):
     return current_user
+
 
 @auth_api.get("/items/")
 async def read_items(token: Annotated[str, Depends(Settings.OAUTH_SCHEME)]):
