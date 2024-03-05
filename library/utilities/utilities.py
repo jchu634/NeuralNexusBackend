@@ -5,15 +5,16 @@ import mmh3
 import shutil
 import logging
 
-import sys, os
-from ..config import Settings
+import sys
+import os
+from library.config import Settings
 
 from library.utilities.inference import get_prediction, get_metadata
 import time
 import traceback
 
 ################ Blueprint/Namespace Configuration ################
-utils_api = APIRouter(tags=["Utilities"])
+utils_api = APIRouter(tags=["Utilities"], prefix="/api/v1")
 
 ################ Global Variables ################
 img_path = Settings.UPLOAD_FOLDER
@@ -23,8 +24,11 @@ isProduction = Settings.ENV_TYPE == 'production'
 inference_cache = {}
 
 ################ Helper Functions ################
+
+
 def clear_cache():
     inference_cache.clear()
+
 
 def is_file_allowed(filename, model=None):
     if not "." in filename:
@@ -36,7 +40,9 @@ def is_file_allowed(filename, model=None):
         return ext.upper() in Settings.ALLOWED_IMAGE_EXTENSIONS
 
 ################ API Endpoints ################
-@utils_api.post('/api/v1/image_inference', responses={200: {"description": "Success"}, 400: {"description": "Bad Request"}, 405: {"description": "Method Not Allowed"}, 500: {"description": "Internal Server Error"}}, tags=["Utilities"])
+
+
+@utils_api.post('/image_inference', responses={200: {"description": "Success"}, 400: {"description": "Bad Request"}, 405: {"description": "Method Not Allowed"}, 500: {"description": "Internal Server Error"}}, tags=["Utilities"])
 # NOTE: currently files does not support documenation:
 # Intended documentation: "List of files to upload"
 def get_inference(files: list[UploadFile], model: str | None = Query(None, description="Model to use for prediction.")):
@@ -46,29 +52,34 @@ def get_inference(files: list[UploadFile], model: str | None = Query(None, descr
     try:
         # Checks if the model is valid before uploading
         if not model or model not in available_models():
-            return ORJSONResponse(content={"error": "Invalid Model"}, status_code=400)     
+            return ORJSONResponse(content={"error": "Invalid Model"}, status_code=400)
         returnList = []
 
         for file in files:
             # Check if the file extension is allowed
             if not is_file_allowed(file.filename, model):
                 return ORJSONResponse(content={"error": "File type not allowed"}, status_code=405)
-            
+
             # Get the hash of the file
             file.file.seek(0)  # Ensure we're at the start of the file
-            hash = mmh3.hash(file.file.read())            
+            hash = mmh3.hash(file.file.read())
 
             if (hash, file.filename) in inference_cache and time.time() - inference_cache[(hash, file.filename)]["time"] < Settings.CACHE_TIMEOUT_PERIOD:
-                logging.info(f"Inference Cache Hit: Served {hash} ({file.filename})")
+                logging.info(
+                    f"Inference Cache Hit: Served {hash} ({file.filename})")
                 del inference_cache[(hash, file.filename)]["time"]
                 returnList.append(inference_cache[(hash, file.filename)])
                 inference_cache[(hash, file.filename)]["time"] = time.time()
             else:
-                logging.info(f"Inference Cache Miss: Inferered {hash} ({file.filename})")
-                file_path = os.path.join(img_path, secure_filename(file.filename))
+                logging.info(
+                    f"Inference Cache Miss: Inferered {hash} ({file.filename})")
+                file_path = os.path.join(
+                    img_path, secure_filename(file.filename))
                 file_ext = os.path.splitext(file_path)[1]
-                filename_without_ext = os.path.splitext(secure_filename(file.filename))[0]
-                file_path = os.path.join(img_path, f"{filename_without_ext}.{str(hash)}{file_ext}")
+                filename_without_ext = os.path.splitext(
+                    secure_filename(file.filename))[0]
+                file_path = os.path.join(
+                    img_path, f"{filename_without_ext}.{str(hash)}{file_ext}")
 
                 # Save the file to disk
                 with open(file_path, "wb") as buffer:
@@ -77,33 +88,40 @@ def get_inference(files: list[UploadFile], model: str | None = Query(None, descr
 
                 # Get the prediction
                 prediction = get_prediction(file_path, model)
-                inference_cache[(hash, file.filename)] = {"name": file.filename, "pred": prediction, "hash": hash, "model": model, "time": time.time()}
-                returnList.append({"name": file.filename, "pred": prediction, "hash": hash, "model": model})
+                inference_cache[(hash, file.filename)] = {
+                    "name": file.filename, "pred": prediction, "hash": hash, "model": model, "time": time.time()}
+                returnList.append(
+                    {"name": file.filename, "pred": prediction, "hash": hash, "model": model})
 
         return JSONResponse(content=returnList)
     except Exception as e:
         logging.error(f"Inference error: {traceback.format_exc()}")
         return ORJSONResponse(content={"error": "Internal Server Error"}, status_code=500)
 
+
 def available_models():
-    subfolders = [os.path.basename(f.path) for f in os.scandir(models_path) if f.is_dir()]
+    subfolders = [os.path.basename(f.path)
+                  for f in os.scandir(models_path) if f.is_dir()]
     return sorted(subfolders, key=str.lower)
 
-@utils_api.get('/api/v1/available_models', tags=["Utilities"])
+
+@utils_api.get('/available_models', tags=["Utilities"])
 def get_available_models():
     """
         Returns a list of available models.
     """
     return JSONResponse(content=available_models())
 
-@utils_api.get('/api/v1/model_file_types', tags=["Utilities"])
-def get_model_file_types(model_name:str):
+
+@utils_api.get('/model_file_types', tags=["Utilities"])
+def get_model_file_types(model_name: str):
     if model_name in available_models():
         return get_metadata(model_name)["fileTypes"]
     else:
         return {"error": "Invalid Model"}
 
-@utils_api.get('/api/v1/get_image', tags=["Utilities"])
+
+@utils_api.get('/get_image', tags=["Utilities"])
 def get_image(image_name: str, hash: str):
     """ 
         Returns an image from the uploads folder.
@@ -115,12 +133,11 @@ def get_image(image_name: str, hash: str):
         filename_with_hash = f"{filename_without_ext}.{hash}{file_ext}"
 
         filepath = os.path.join(img_path, filename_with_hash)
-        
+
         if not os.path.isfile(filepath) or is_file_allowed(filename) == False:
             return {"error": "File not found"}
-        
+
         return FileResponse(filepath)
     except Exception as e:
         logging.error(f"Image Fetch error: {traceback.format_exc()}")
         return ORJSONResponse(content={"error": "Internal Server Error"}, status_code=500)
-        

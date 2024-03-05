@@ -12,7 +12,7 @@ from ..config import Settings
 
 ################ Blueprint/Namespace Configuration ################
 
-utils_api = APIRouter(tags=["Utilities"])
+utils_api = APIRouter(tags=["Utilities"], prefix="/api/v1")
 
 ################ Global Variables ################
 
@@ -30,7 +30,7 @@ async def resize_img(path):
 
 ################ API Endpoints ################
 
-@utils_api.post('/api/v1/create_xlsx', responses={200: {"description": "Success"}, 400: {"description": "Bad Request (Likely Invalid JSON)"}, 405: {"description": "Method Not Allowed"}, 500: {"description": "Internal Server Error"}}, tags=["Utilities"])
+@utils_api.post('/create_xlsx', responses={200: {"description": "Success"}, 400: {"description": "Bad Request (Likely Invalid JSON)"}, 405: {"description": "Method Not Allowed"}, 500: {"description": "Internal Server Error"}}, tags=["Utilities"])
 async def json_to_xlsx(request: Request, results: list[dict]= Body(...)):
     """
         Creates an XLSX file from JSON prediction data
@@ -94,7 +94,7 @@ async def json_to_xlsx(request: Request, results: list[dict]= Body(...)):
         else:
             return JSONResponse(content={"error": str(e)}, status_code=500)
 
-@utils_api.post('/api/v1/create_csv', responses={200: {"description": "Success"}, 400: {"description": "Bad Request (Likely Invalid JSON)"}, 405: {"description": "Method Not Allowed"}, 500: {"description": "Internal Server Error"}}, tags=["Utilities"])
+@utils_api.post('/create_csv', responses={200: {"description": "Success"}, 400: {"description": "Bad Request (Likely Invalid JSON)"}, 405: {"description": "Method Not Allowed"}, 500: {"description": "Internal Server Error"}}, tags=["Utilities"])
 async def json_to_csv(request: Request, results: list[dict]= Body(...)):
     """
         Creates a CSV file from JSON prediction data
