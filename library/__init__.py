@@ -8,6 +8,7 @@ from .config import Settings
 from library.database import models
 from library.database.database import engine
 
+
 def create_app(config=None, aargs=None):
     models.Base.metadata.create_all(bind=engine)
     tags_metadata = [
@@ -20,11 +21,11 @@ def create_app(config=None, aargs=None):
             "description": "Api dedicated to serving the React App for local app client+server deployment.\n This API is not used for web-based deployment."
         },
         {
-            "name":"Admin",
+            "name": "Admin",
             "description": "Api dedicated to server administration"
         },
         {
-            "name":"Auth",
+            "name": "Auth",
             "description": "Api dedicated to Authenticating Users"
         }
 
@@ -32,7 +33,8 @@ def create_app(config=None, aargs=None):
     if Settings.ENV_TYPE == "development":
         app = FastAPI(openapi_tags=tags_metadata)
     else:
-        app = FastAPI(openapi_tags=tags_metadata, docs_url=None, redoc_url=None)
+        app = FastAPI(openapi_tags=tags_metadata,
+                      docs_url=None, redoc_url=None)
 
     origins = [
         "http://localhost",
@@ -50,10 +52,16 @@ def create_app(config=None, aargs=None):
         allow_headers=["*"],
     )
 
-    Settings.OAUTH_SCHEME = OAuth2PasswordBearer(tokenUrl="token")
+    Settings.OAUTH_SCHEME = OAuth2PasswordBearer(
+        tokenUrl="token",
+        scopes={
+            "user": "Regular user permissions",
+            "admin": "Admin priviledges (Admin API Access)"
+        }
+    )
 
     from library.utilities import utilities, file_exports
-    from library.admin import api as admin_api
+    from library.admin_api import api as admin_api
     from library.auth import api as auth_api
     app.include_router(utilities.utils_api)
     app.include_router(file_exports.utils_api)
