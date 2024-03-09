@@ -2,9 +2,9 @@ import io
 from fastapi import APIRouter, HTTPException, status, Depends, Security, status
 from fastapi.responses import ORJSONResponse, JSONResponse, FileResponse, Response
 
-from library.utilities.utilities import clear_cache
+from library.utilities_api.utilities import clear_cache
 from library.database.database import SessionLocal
-from library.auth.api import check_if_user_admin, credentials_exception
+from library.auth_api.api import check_if_user_admin, credentials_exception
 from library.config import Settings
 
 from typing import Annotated

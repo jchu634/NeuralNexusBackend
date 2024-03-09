@@ -9,7 +9,7 @@ import sys
 import os
 from library.config import Settings
 
-from library.utilities.inference import get_prediction, get_metadata
+from library.utilities_api.inference import get_prediction, get_metadata
 import time
 import traceback
 

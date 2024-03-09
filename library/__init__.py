@@ -60,9 +60,9 @@ def create_app(config=None, aargs=None):
         }
     )
 
-    from library.utilities import utilities, file_exports
+    from library.utilities_api import utilities, file_exports
     from library.admin_api import api as admin_api
-    from library.auth import api as auth_api
+    from library.auth_api import api as auth_api
     app.include_router(utilities.utils_api)
     app.include_router(file_exports.utils_api)
     app.include_router(admin_api.admin_api)
@@ -70,7 +70,7 @@ def create_app(config=None, aargs=None):
 
     # Only deploy react build only if it is a client+server deployment
     if Settings.ENV_TYPE != "server" or Settings.ENV_TYPE == "development":
-        from .home import home
+        from library.home_api import home
         # NOTE: REGISTER home_router LAST AS IT HOSTS A CATCH ALL ROUTE AND WILL OVERRIDE OTHER ROUTES
         app.include_router(home.home_router)
 
