@@ -10,7 +10,6 @@ from library.database.database import engine
 
 
 def create_app(config=None, aargs=None):
-    models.Base.metadata.create_all(bind=engine)
     tags_metadata = [
         {
             "name": "Utilities",
@@ -46,12 +45,15 @@ def create_app(config=None, aargs=None):
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    if config:
+        Settings.model_copy(update=config)
 
+    models.Base.metadata.create_all(bind=engine)
     Settings.OAUTH_SCHEME = OAuth2PasswordBearer(
         tokenUrl="token",
         scopes={

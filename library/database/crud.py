@@ -70,17 +70,25 @@ def create_user(db: Session, username: str, email: str, password: str):
     return db_user
 
 
-def update_user_email(db: Session, username: str, email: str):
-    db_user = get_users_by_username(username)
+def set_user_email(db: Session, uid: str, email: str):
+    db_user = get_user_by_uid(uid)
     db_user.email = email
     db.commit()
     db.refresh(db_user)
     return db_user
 
 
-def update_user_password(db: Session, username: str, password: str):
-    db_user = get_users_by_username(username)
+def set_user_password(db: Session, uid: str, password: str):
+    db_user = get_user_by_uid(uid)
     db_user.password = argon2.hash(password)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+def set_user_admin(db: Session, uid: str, is_admin: bool):
+    db_user = get_user_by_uid(uid)
+    db_user.is_admin = is_admin
     db.commit()
     db.refresh(db_user)
     return db_user
