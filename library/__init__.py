@@ -8,7 +8,6 @@ from .config import Settings
 from library.database import models
 from library.database.database import engine
 
-
 def create_app(config=None, aargs=None):
     tags_metadata = [
         {
@@ -65,10 +64,17 @@ def create_app(config=None, aargs=None):
     from library.utilities_api import utilities, file_exports
     from library.admin_api import api as admin_api
     from library.auth_api import api as auth_api
+    from library.auth_api.backend import auth_backend
+    
     app.include_router(utilities.utils_api)
     app.include_router(file_exports.utils_api)
     app.include_router(admin_api.admin_api)
-    app.include_router(auth_api.auth_api)
+    app.include_router(
+        auth_api.fastapi_users.get_auth_router(auth_backend)
+        prefix="/auth/jwt",
+        tags=["auth"],
+    )
+
 
     # Only deploy react build only if it is a client+server deployment
     if Settings.ENV_TYPE != "server" or Settings.ENV_TYPE == "development":

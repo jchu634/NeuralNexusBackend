@@ -7,11 +7,8 @@ ecdsa
 tensorflow
 torch
 mmh3
-passlib
 pydantic_settings
 sqlalchemy
-passlib
-argon2_cffi
 python-multipart
 pillow
 openpyxl
