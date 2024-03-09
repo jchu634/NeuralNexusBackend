@@ -8,7 +8,7 @@ class User(BaseModel):
     password_hash: str
     is_admin: bool
     images: list["Image"]
-    settings: list["Setting"]
+    settings: set["Setting"]
 
 
 class Setting(BaseModel):

@@ -16,7 +16,7 @@ class User(Base):
     email = Column(String, nullable=True)
     password_hash = Column(String)
     is_admin = Column(Boolean)
-    images: Mapped[list["Image"]] = relationship(back_populates="user")
+    images: Mapped[set["Image"]] = relationship(back_populates="user")
     settings: Mapped["Setting"] = relationship(back_populates="user")
 
 
@@ -34,7 +34,7 @@ class Image(Base):
     image_hash = Column(String, index=True)
     image_name = Column(String, index=True)
     expiry_time = Column(Integer, index=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("user_table.id"))
+    uid: Mapped[str] = mapped_column(ForeignKey("user_table.id"))
     user: Mapped["User"] = relationship(
         back_populates="images"
     )
