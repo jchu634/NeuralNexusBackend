@@ -71,23 +71,39 @@ def create_user(db: Session, username: str, email: str, password: str):
 
 
 def set_user_email(db: Session, uid: str, email: str):
-    db_user = get_user_by_uid(uid)
+    db_user = get_user_by_uid(db, uid)
     db_user.email = email
     db.commit()
     db.refresh(db_user)
     return db_user
 
 
-def set_user_password(db: Session, uid: str, password: str):
-    db_user = get_user_by_uid(uid)
+def set_user_password_by_uid(db: Session, uid: str, password: str):
+    db_user = get_user_by_uid(db, uid)
     db_user.password = argon2.hash(password)
     db.commit()
     db.refresh(db_user)
     return db_user
 
 
-def set_user_admin(db: Session, uid: str, is_admin: bool):
-    db_user = get_user_by_uid(uid)
+def set_user_password_by_username(db: Session, username: str, password: str):
+    db_user = get_users_by_username(db, username)
+    db_user.password = argon2.hash(password)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+def set_user_admin_by_uid(db: Session, uid: str, is_admin: bool):
+    db_user = get_users_by_username(db, uid)
+    db_user.is_admin = is_admin
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+def set_user_admin_by_username(db: Session, username: str, is_admin: bool):
+    db_user = get_users_by_username(db, username)
     db_user.is_admin = is_admin
     db.commit()
     db.refresh(db_user)

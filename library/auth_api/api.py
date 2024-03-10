@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Security
+from fastapi import APIRouter, HTTPException, status, Depends, Security, Form
 from fastapi.responses import ORJSONResponse, JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm, SecurityScopes
 from pydantic import BaseModel, ValidationError
@@ -98,8 +98,10 @@ async def get_current_user(
                 headers={"WWW-Authenticate": authenticate_value},
             )
     return JSONResponse(content={
+        "uid": user.id,
         "username": user.username,
-        "email": user.email
+        "email": user.email,
+        "admin": user.is_admin
     })
 
 
@@ -146,7 +148,7 @@ async def check_if_user_admin(
 
 
 @auth_api.post("/create_user")
-def create_user(username: str, email: str, password: str, db: Session = Depends(get_db)):
+def create_user(username: Annotated[str, Form()], email: Annotated[str, Form()], password: Annotated[str, Form()], db: Session = Depends(get_db)):
     try:
         crud.create_user(db, username, email, password)
         logging.info(f"Created user {username}")
@@ -192,6 +194,6 @@ async def read_users_me(current_user: Annotated[models.User, Depends(get_current
     return current_user
 
 
-@auth_api.get("/items/")
+@auth_api.get("/read_token")
 async def read_items(token: Annotated[str, Depends(Settings.OAUTH_SCHEME)]):
     return {"token": token}
