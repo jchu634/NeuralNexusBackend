@@ -20,7 +20,6 @@ class settingsModel(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     AUTH_ALGORITHM: str = "HS256"
 
-    MEMORY_DATABASE: bool = False
     model_config = SettingsConfigDict(
         env_file=(
             ".env.production.local",

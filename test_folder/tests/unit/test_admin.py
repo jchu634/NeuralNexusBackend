@@ -1,6 +1,6 @@
 from pathlib import Path
 import pytest
-from test_folder.tests.unit.test_auth import test_login, test_login_with_admin_admin_scope
+from test_folder.tests.unit.test_auth import test_login, test_admin_login
 
 
 @pytest.mark.skip(reason="I have no idea how to get a token with OAUTH2 scopes")
@@ -9,7 +9,7 @@ def test_get_user(client):
     path = "/api/v1/admin/clear_inference_cache"
 
     token = test_login(client)
-    admin_token = test_login_with_admin_admin_scope(client)
+    admin_token = test_admin_login(client)
     unauth_response = client.get(
         path
     )

@@ -150,7 +150,8 @@ async def check_if_user_admin(
 @auth_api.post("/create_user")
 def create_user(username: Annotated[str, Form()], email: Annotated[str, Form()], password: Annotated[str, Form()], db: Session = Depends(get_db)):
     try:
-        crud.create_user(db, username, email, password)
+        if crud.create_user(db, username, email, password) == None:
+            raise IntegrityError
         logging.info(f"Created user {username}")
         return JSONResponse(content={"success": "user made"})
     except IntegrityError as e:

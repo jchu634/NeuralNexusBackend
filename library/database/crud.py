@@ -55,6 +55,8 @@ def get_users_by_email(db: Session, email: str):
 
 
 def create_user(db: Session, username: str, email: str, password: str):
+    if get_users_by_username(db, username) != None:
+        return None
     db_settings = models.Setting(
         id=uuid.uuid4().hex, image_expiry=Settings.IMAGE_DEFAULT_EXPIRY_PERIOD)
     db_user = models.User(id=db_settings.id, username=username,

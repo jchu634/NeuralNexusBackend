@@ -9,7 +9,7 @@ from library.database import models
 from library.database.database import engine
 
 
-def create_app(config=None, aargs=None):
+def create_app(config=None, aargs=None, disable_database=False):
     tags_metadata = [
         {
             "name": "Utilities",
@@ -53,7 +53,8 @@ def create_app(config=None, aargs=None):
     if config:
         Settings.model_copy(update=config)
 
-    models.Base.metadata.create_all(bind=engine)
+    if not disable_database:
+        models.Base.metadata.create_all(bind=engine)
     Settings.OAUTH_SCHEME = OAuth2PasswordBearer(
         tokenUrl="token",
         scopes={

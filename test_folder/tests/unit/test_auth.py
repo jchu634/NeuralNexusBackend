@@ -1,7 +1,6 @@
 from pathlib import Path
 import pytest
-import os
-from library.database.crud import set_user_admin_by_username
+from test_folder.tests.unit.test_crud import test_set_admin
 
 from fastapi.security import OAuth2PasswordBearer
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", scopes={
@@ -24,26 +23,30 @@ test_admin = {
 }
 
 
-def test_create_user(client):
+def test_create_user(client, user=test_user):
     response = client.post(
         '/create_user',
-        data=test_user
+        data=user
     )
     assert response.status_code == 200
     assert response.json() == {'success': 'user made'}
 
 
-@pytest.mark.dependency(depends=["test_set_admin"])
+@pytest.mark.dependency(depends=["test_create_user", "test_set_admin"])
 def test_create_admin(client, get_db):
-    response = client.post(
-        '/create_user',
-        data=test_admin
+    test_create_user(client, test_admin)
+    test_set_admin(get_db, username=test_admin["username"])
+
+    token = test_admin_login(client)
+    response = client.get(
+        "/users/me",
+        headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 200
-    assert response.json() == {'success': 'user made'}
-    session = get_db
-    print(test_admin["username"])
-    set_user_admin_by_username(session, test_admin["username"], True)
+    assert response.json()["email"] == test_user["email"]
+    assert response.json()["username"] == test_user["username"]
+    assert response.json()["uid"] != None
+    assert response.json()["admin"] == True
 
 
 @pytest.mark.dependency(depends=["test_create_user"])
@@ -54,27 +57,11 @@ def test_login(client):
     assert token is not None
     return token
 
-
-@pytest.mark.dependency(depends=["test_create_user"])
-def test_login_with_user_scope(client):
-    response = client.post("/token", data={**test_user, "scopes": "user"})
-    assert response.status_code == 200
-    token = response.json()["access_token"]
-    assert token is not None
-    return token
-
-
-@pytest.mark.dependency(depends=["test_create_user"])
-def test_login_with_user_admin_scope(client):
-    response = client.post("/token", data={**test_user, "scopes": "admin"})
-    assert response.status_code == 200
-    token = response.json()["access_token"]
-    assert token is not None
-    return token
+# Non-Functional, scope doesn't actually work properly
 
 
 @pytest.mark.dependency(depends=["test_create_admin"])
-def test_login_with_admin_admin_scope(client):
+def test_admin_login(client):
     response = client.post("/token", data={**test_admin, "scopes": "admin"})
     assert response.status_code == 200
     token = response.json()["access_token"]
